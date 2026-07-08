@@ -1,71 +1,133 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
-
-app = FastAPI(title="TDS GA2 Q5")
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import uuid
+import time
+from collections import deque
 
 EMAIL = "24f3001946@ds.study.iitm.ac.in"
-API_KEY = "ak_0citp5pjbarefnmdra6ymooc"
 
-# Allow CORS for browser-based grading
+app = FastAPI(title="TDS GA2 Q6")
+
+# Allow browser access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Startup time
+START_TIME = time.time()
 
-class Event(BaseModel):
-    user: str
-    amount: float
-    ts: int
+# Prometheus counter
+REQUEST_COUNTER = Counter(
+    "http_requests_total",
+    "Total HTTP Requests"
+)
+
+# Keep the last 100 log entries
+LOGS = deque(maxlen=100)
 
 
-class AnalyticsRequest(BaseModel):
-    events: List[Event]
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())
 
-@app.post("/analytics")
-async def analytics(
-    request: AnalyticsRequest,
-    x_api_key: str = Header(None)
-):
-    # API Key Authentication
-    if x_api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized"
-        )
+    REQUEST_COUNTER.inc()
 
-    total_events = len(request.events)
+    response = await call_next(request)
 
-    unique_users = len(set(event.user for event in request.events))
+    LOGS.append({
+        "level": "INFO",
+        "ts": time.time(),
+        "path": request.url.path,
+        "request_id": request_id
+    })
 
-    revenue = 0.0
-    user_totals = {}
+    response.headers["X-Request-ID"] = request_id
+    return response
 
-    for event in request.events:
-        if event.amount > 0:
-            revenue += event.amount
-            user_totals[event.user] = (
-                user_totals.get(event.user, 0) + event.amount
-            )
 
-    top_user = ""
-    if user_totals:
-        top_user = max(user_totals, key=user_totals.get)
-
+@app.get("/work")
+def work(n: int = 1):
     return {
         "email": EMAIL,
-        "total_events": total_events,
-        "unique_users": unique_users,
-        "revenue": round(revenue, 2),
-        "top_user": top_user
+        "done": n
     }
 
 
-@app.get("/")
-def root():
-    return {"message": "TDS GA2 Q5 Running"}
+@app.get("/healthz")
+def health():
+    return {
+        "status": "ok",
+        "uptime_s": round(time.time() - START_TIME, 3)
+    }
+
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import uuid
+import time
+from collections import deque
+
+EMAIL = "24f3001946@ds.study.iitm.ac.in"
+
+app = FastAPI(title="TDS GA2 Q6")
+
+# Allow browser access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Startup time
+START_TIME = time.time()
+
+# Prometheus counter
+REQUEST_COUNTER = Counter(
+    "http_requests_total",
+    "Total HTTP Requests"
+)
+
+# Keep the last 100 log entries
+LOGS = deque(maxlen=100)
+
+
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+
+    REQUEST_COUNTER.inc()
+
+    response = await call_next(request)
+
+    LOGS.append({
+        "level": "INFO",
+        "ts": time.time(),
+        "path": request.url.path,
+        "request_id": request_id
+    })
+
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
+@app.get("/work")
+def work(n: int = 1):
+    return {
+        "email": EMAIL,
+        "done": n
+    }
+
+
+@app.get("/healthz")
+def health():
+    return {
+        "status": "ok",
+        "uptime_s": round(time.time() - START_TIME, 3)
+    }
